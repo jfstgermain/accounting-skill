@@ -153,8 +153,11 @@ def review_state_for(doc: dict) -> tuple[str, list[str]]:
         bump("REVIEW")
 
     dates = doc.get("dates") or []
-    if not dates:
-        tickets.append("no dated obligation found in the document")
+    actionable_types = {"RQ-COLLECTION", "RQ-NON-PRODUCTION", "RQ-REFUND-HOLD"}
+    nonzero = any((a.get("value") not in (None, "0.00", "0")) for a in (doc.get("amounts") or []))
+    needs_action = nonzero or doc.get("doc_type") in actionable_types
+    if not dates and needs_action:
+        tickets.append("no dated obligation found — confirm whether action is required")
         bump("WARN")
     today = _dt.date.today().isoformat()
     for d in dates:

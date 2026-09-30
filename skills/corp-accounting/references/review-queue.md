@@ -8,9 +8,13 @@ was filed, paid, remitted, or submitted — it flags what a human must look at.
 
 | State | Meaning | Trigger |
 | --- | --- | --- |
-| `OK` | Fully legible, provenance present, type/jurisdiction clear | default |
-| `WARN` | Needs a look, not blocking | no dated obligation found; extractor `confidence: WARN` |
+| `OK` | Fully legible, provenance present, type/jurisdiction clear, nothing outstanding | default; informational zero-balance notices |
+| `WARN` | Needs a look, not blocking | a deadline has passed; no dated obligation where one is implied; extractor `confidence: WARN` |
 | `REVIEW` | A required fact is missing or untrusted | see below |
+
+"Implies an action" = a non-zero amount, or a document type in
+`RQ-COLLECTION`, `RQ-NON-PRODUCTION`, `RQ-REFUND-HOLD`. A zero-balance assessment with no
+penalty is informational and stays `OK`.
 
 ## REVIEW triggers
 
