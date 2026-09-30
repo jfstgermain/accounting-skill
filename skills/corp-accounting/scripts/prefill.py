@@ -49,6 +49,10 @@ TYPE_RULES = [
     ("RQ-NON-PRODUCTION", re.compile(r"avis de non-production", re.I)),
     ("RQ-COLLECTION", re.compile(r"avis de recouvrement", re.I)),
     ("RQ-REFUND-HOLD", re.compile(r"paiement ou crédit excédentaire|déclarations non produites", re.I)),
+    ("TAX-FILING", re.compile(
+        r"instructions relatives à la production|déclaration de revenus des sociétés"
+        r"|T2\s*[-–]?\s*déclaration|CO-17\s*[-–]?\s*déclaration", re.I)),
+    ("FINANCIAL-STATEMENT", re.compile(r"états financiers|états des résultats|exercice terminé le|bilan\b", re.I)),
     ("RQ-TPS-TVH-ASSESSMENT", re.compile(r"avis de cotisation concernant la taxe sur les produits", re.I)),
     ("RQ-TPS-TVH-ASSESSMENT", re.compile(r"taxe perçue|taxe sur les intrants|\bRTI\b", re.I)),
     ("RQ-PAYMENT", re.compile(r"détail du paiement|payment specifics", re.I)),
