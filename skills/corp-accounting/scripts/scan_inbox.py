@@ -30,6 +30,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vaultlib as V  # noqa: E402
 
 
+def _topic_for(abs_path: str, inbox: str) -> str | None:
+    """First folder under _Inbox, if any, e.g. 'Overpaid REV QC'."""
+    rel = os.path.relpath(abs_path, inbox)
+    parts = rel.split(os.sep)
+    return parts[0] if len(parts) > 1 else None
+
+
 def scan(vault: str) -> dict:
     V.ensure_vault(vault)
     inbox = os.path.join(vault, V.INBOX_REL)
@@ -61,6 +68,7 @@ def scan(vault: str) -> dict:
                 "parsed": parsed,
                 "naming_ok": bool(parsed) and not issues,
                 "issues": issues,
+                "topic": _topic_for(abs_path, inbox),
             }
             record = processed.get(digest)
             if record:

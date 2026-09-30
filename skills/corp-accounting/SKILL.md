@@ -163,6 +163,14 @@ python3 "$SKILL/scripts/selftest.py"
 - `references/review-queue.md` — OK / WARN / REVIEW rules and ticket language
 - `references/reminders-contract.md` — staging, dedup, and confirmation flow
 - `references/report-contracts.md` — report/note frontmatter and templates
+- `references/tabular-data.md` — CSV / Apple Numbers exports: redact, summarize, reconcile
+
+## Tabular inputs (CSV / Apple Numbers)
+
+Bank and accounting exports are not PDFs. Raw exports stay **outside** the vault; make a
+cloud-safe copy with `redact_table.py` (same identity config as the PDF anonymizer, with
+flexible name matching), then summarize/reconcile with `bank_summary.py`. Details:
+`references/tabular-data.md`. Never read a raw export into a cloud model.
 
 ## Scripts
 
@@ -172,5 +180,7 @@ python3 "$SKILL/scripts/selftest.py"
 - `scripts/ledger.py` — upsert extracted docs; render review_queue.md
 - `scripts/file_docs.py` — sort processed docs into jurisdiction folders
 - `scripts/reminders.py` — stage reminder proposals; mark created
+- `scripts/redact_table.py` — redact CSV / TSV / Apple Numbers exports (identity config + patterns)
+- `scripts/bank_summary.py` — classify / total / reconcile a (redacted) transactions export
 - `scripts/selftest.py` — end-to-end test on a throwaway vault
 - `scripts/vaultlib.py` — shared helpers (paths, naming, hashing, review rules)

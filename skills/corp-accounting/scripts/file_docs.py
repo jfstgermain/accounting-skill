@@ -46,11 +46,14 @@ def file_documents(vault: str, manifest: dict | None = None, dry_run: bool = Fal
         # jurisdiction: prefer the filename, fall back to the extracted document
         juris = e["parsed"]["juris"] if name_ok else V.canon_juris_dir(doc.get("jurisdiction"))
 
+        topic = e.get("topic") or doc.get("topic")
         target_name = e["name"]
         if not juris:
             dest_dir = os.path.join(vault, V.UNSORTED_REL)
         else:
             dest_dir = os.path.join(vault, V.ANON_REL, juris)
+            if topic:
+                dest_dir = os.path.join(dest_dir, topic)
             if not name_ok:
                 built = V.conventional_name(
                     juris,

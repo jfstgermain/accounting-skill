@@ -51,6 +51,9 @@ TYPE_RULES = [
     ("RQ-REFUND-HOLD", re.compile(r"paiement ou crédit excédentaire|déclarations non produites", re.I)),
     ("RQ-TPS-TVH-ASSESSMENT", re.compile(r"avis de cotisation concernant la taxe sur les produits", re.I)),
     ("RQ-TPS-TVH-ASSESSMENT", re.compile(r"taxe perçue|taxe sur les intrants|\bRTI\b", re.I)),
+    ("RQ-PAYMENT", re.compile(r"détail du paiement|payment specifics", re.I)),
+    ("RQ-STATEMENT", re.compile(
+        r"détail du relevé de compte|statement of account details|solde créditeur", re.I)),
     ("RQ-DAS-ASSESSMENT", re.compile(r"masse salariale|retenues à la source|\bRRQ\b|\bRQAP\b|dossier\s*:?\s*RS", re.I)),
     ("RQ-CO17-ASSESSMENT", re.compile(r"dossier\s*:?\s*IC|loi sur les imp[ôo]ts", re.I)),
 ]
@@ -126,6 +129,7 @@ def prefill(path: str) -> dict:
         "amounts": [],
         "references": [],
         "confidence": "WARN",
+        "topic": None,
         "notes": "deterministic prefill — review before trusting",
     }
     kind_for_dates = "response" if doc["doc_type"] in ("RQ-NON-PRODUCTION", "RQ-REFUND-HOLD") else "payment"
@@ -184,17 +188,23 @@ def main() -> int:
 
     vault = os.path.expanduser(args.vault)
     scan_dir = os.path.expanduser(args.dir) if args.dir else os.path.join(vault, V.INBOX_REL)
+    inbox = os.path.join(vault, V.INBOX_REL)
     out_dir = os.path.join(vault, V.EXTRACTED_REL)
     os.makedirs(out_dir, exist_ok=True)
     written = []
-    for name in sorted(os.listdir(scan_dir)):
-        if name.startswith(".") or not name.lower().endswith(".pdf"):
-            continue
-        path = os.path.join(scan_dir, name)
-        doc = prefill(path)
-        doc["source_file"] = os.path.relpath(path, vault)
-        V.save_json(os.path.join(out_dir, f"{doc['doc_id']}.json"), doc)
-        written.append((name, doc["doc_type"], doc["issued_date"], doc["period"]))
+    for root, _dirs, files in os.walk(scan_dir):
+        for name in sorted(files):
+            if name.startswith(".") or not name.lower().endswith(".pdf"):
+                continue
+            path = os.path.join(root, name)
+            doc = prefill(path)
+            doc["source_file"] = os.path.relpath(path, vault)
+            rel = os.path.relpath(path, inbox)
+            parts = rel.split(os.sep)
+            if len(parts) > 1:
+                doc["topic"] = parts[0]
+            V.save_json(os.path.join(out_dir, f"{doc['doc_id']}.json"), doc)
+            written.append((os.path.relpath(path, scan_dir), doc["doc_type"], doc["issued_date"], doc["period"]))
     for row in written:
         print("  ".join(str(x) for x in row))
     print(f"wrote {len(written)} draft(s) to {out_dir}")
