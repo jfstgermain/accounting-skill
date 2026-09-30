@@ -66,7 +66,20 @@ python3 "$SKILL/scripts/extract_text.py" "$VAULT/30_Anonymized/_Inbox/<file>.pdf
 ```
 
 Read that text and write **one** extracted-document JSON per file to
-`20_Extracted/<sha256>.json`, using the contract in `references/doc-types.md`:
+`20_Extracted/<sha256>.json`, using the contract in `references/doc-types.md`.
+
+**Optional accelerator.** For RQ/CRA forms, `prefill.py` drafts the JSON by pairing known
+labels with their values (page + snippet provenance), then you review and correct it:
+
+```bash
+python3 "$SKILL/scripts/prefill.py" --vault "$VAULT"                 # drafts from _Inbox
+python3 "$SKILL/scripts/prefill.py" --vault "$VAULT" --dir "$VAULT/30_Anonymized/RevenuQC"
+```
+
+Fields it cannot resolve are left out and the draft stays `confidence: WARN`. Always review
+before trusting — it is a deterministic draft, not an authority.
+
+The JSON carries:
 
 - `jurisdiction`, `doc_type`, `period`, `issued_date`
 - `dates[]` — every filing/payment/instalment/response date, each with `page` + `snippet`
@@ -93,7 +106,9 @@ python3 "$SKILL/scripts/file_docs.py" --vault "$VAULT"
 
 Moves processed files into `30_Anonymized/<JURIS>/` (or `_Unsorted/`), handles name
 collisions, and keeps ledger provenance in sync. Files not yet processed are skipped and
-reported.
+reported. A file whose name does not follow the convention but whose extracted
+`jurisdiction` is known is **renamed to the convention** and filed by content; the original
+name is kept in `processed.json`. Only a genuinely unknown jurisdiction goes to `_Unsorted/`.
 
 ### 6. Render the review queue
 
@@ -153,6 +168,7 @@ python3 "$SKILL/scripts/selftest.py"
 
 - `scripts/scan_inbox.py` — hashes new inbox files, validates names, dedups vs processed.json
 - `scripts/extract_text.py` — local page-tagged text dump (PyMuPDF)
+- `scripts/prefill.py` — deterministic draft extraction for RQ/CRA forms (review before use)
 - `scripts/ledger.py` — upsert extracted docs; render review_queue.md
 - `scripts/file_docs.py` — sort processed docs into jurisdiction folders
 - `scripts/reminders.py` — stage reminder proposals; mark created

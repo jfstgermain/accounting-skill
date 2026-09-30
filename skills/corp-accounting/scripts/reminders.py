@@ -21,7 +21,6 @@ import datetime as dt
 import json
 import os
 import sys
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vaultlib as V  # noqa: E402
 
@@ -54,6 +53,10 @@ def stage(vault: str) -> dict:
             continue
         if o.get("kind") not in REMINDER_KINDS or not o.get("date"):
             continue
+        if o.get("state") == "REVIEW":
+            continue  # REVIEW obligations are tickets, never reminders
+        if o["date"] < dt.date.today().isoformat():
+            continue  # past dates are surfaced as tickets, not future reminders
         seen.add(key)
         proposals.append({
             "key": key,
@@ -83,14 +86,16 @@ def mark(vault: str, key: str, note: str | None = None) -> dict:
 
 
 def main() -> int:
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--vault", default=V.DEFAULT_VAULT)
+
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--vault", default=V.DEFAULT_VAULT)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    p_stage = sub.add_parser("stage")
+    p_stage = sub.add_parser("stage", parents=[common])
     p_stage.add_argument("--json", action="store_true")
 
-    p_mark = sub.add_parser("mark")
+    p_mark = sub.add_parser("mark", parents=[common])
     p_mark.add_argument("--key", required=True)
     p_mark.add_argument("--note")
 

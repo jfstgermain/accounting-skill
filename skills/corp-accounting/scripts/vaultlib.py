@@ -7,6 +7,7 @@ file's directory to sys.path so it can be imported when run directly.
 
 from __future__ import annotations
 
+import datetime as _dt
 import hashlib
 import json
 import os
@@ -35,6 +36,9 @@ JURIS_DIRS = {
     "PAYROLL": "Payroll",
     "ACCOUNTANT": "Accountant",
 }
+
+# Canonical jurisdiction folder -> token used in a normalised filename.
+JURIS_TOKENS = {"CRA": "CRA", "RevenuQC": "RQ", "Payroll": "Payroll", "Accountant": "Accountant"}
 
 # YYYY-MM-DD_<JURIS>_<TYPE>_<PERIOD>[_rev<N>][_anon].ext
 NAME_RE = re.compile(
@@ -108,6 +112,23 @@ def canon_juris_dir(juris: str | None):
     return JURIS_DIRS.get(juris.upper()) or JURIS_DIRS.get(juris) or None
 
 
+def sanitize_token(value: str | None, default: str = "UNKNOWN") -> str:
+    """Uppercase, hyphenated token safe for the filename convention."""
+    if not value:
+        return default
+    cleaned = re.sub(r"[^A-Za-z0-9.]+", "-", str(value).strip()).strip("-.")
+    return cleaned.upper() or default
+
+
+def conventional_name(juris: str, date: str | None, doc_type: str | None,
+                      period: str | None, ext: str = "pdf") -> str | None:
+    """Build a conforming filename from extracted fields; None if too incomplete."""
+    token = JURIS_TOKENS.get(juris)
+    if not token or not date:
+        return None
+    return f"{date}_{token}_{sanitize_token(doc_type)}_{sanitize_token(period)}.{ext.lower()}"
+
+
 def review_state_for(doc: dict) -> tuple[str, list[str]]:
     """Deterministic OK/WARN/REVIEW for one extracted document.
 
@@ -135,6 +156,7 @@ def review_state_for(doc: dict) -> tuple[str, list[str]]:
     if not dates:
         tickets.append("no dated obligation found in the document")
         bump("WARN")
+    today = _dt.date.today().isoformat()
     for d in dates:
         if not d.get("date"):
             tickets.append(f"date entry without a date: {d.get('label', '?')}")
@@ -142,6 +164,9 @@ def review_state_for(doc: dict) -> tuple[str, list[str]]:
         if not d.get("page") or not d.get("snippet"):
             tickets.append(f"date entry lacks provenance (page+snippet): {d.get('label', d.get('date', '?'))}")
             bump("REVIEW")
+        if d.get("date") and d["date"] < today:
+            tickets.append(f"date {d['date']} has passed — confirm status (do not assume filed/paid)")
+            bump("WARN")
 
     for a in doc.get("amounts") or []:
         if not a.get("page") or not a.get("snippet"):

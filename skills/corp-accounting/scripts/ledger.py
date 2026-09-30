@@ -179,15 +179,17 @@ def review(vault: str, out: str | None) -> dict:
 
 
 def main() -> int:
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--vault", default=V.DEFAULT_VAULT)
+
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--vault", default=V.DEFAULT_VAULT)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    p_up = sub.add_parser("upsert", help="merge one extracted document")
+    p_up = sub.add_parser("upsert", parents=[common], help="merge one extracted document")
     p_up.add_argument("--extracted", required=True)
     p_up.add_argument("--json", action="store_true")
 
-    p_rv = sub.add_parser("review", help="render review_queue.md")
+    p_rv = sub.add_parser("review", parents=[common], help="render review_queue.md")
     p_rv.add_argument("--out")
     p_rv.add_argument("--json", action="store_true")
 

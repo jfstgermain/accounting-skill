@@ -31,30 +31,51 @@ def file_documents(vault: str, manifest: dict | None = None, dry_run: bool = Fal
     processed_path = os.path.join(vault, V.LEDGER_REL, V.PROCESSED_FILE)
     processed = V.load_json(processed_path, {}) or {}
 
-    moves, skipped = [], []
+    ledger = V.load_json(os.path.join(vault, V.LEDGER_REL, V.LEDGER_FILE), None) or {}
+    documents = ledger.get("documents", {}) if isinstance(ledger, dict) else {}
+
+    moves, skipped, renamed = [], [], []
     for e in manifest["new"] + manifest["already_processed"]:
         record = processed.get(e["sha256"])
         if not record:
             skipped.append({"path": e["path"], "reason": "not processed yet"})
             continue
+        doc = documents.get(e["sha256"], {})
 
-        if e["naming_ok"] and e["parsed"] and e["parsed"].get("juris"):
-            dest_dir = os.path.join(vault, V.ANON_REL, e["parsed"]["juris"])
-        else:
+        name_ok = bool(e["naming_ok"] and e["parsed"] and e["parsed"].get("juris"))
+        # jurisdiction: prefer the filename, fall back to the extracted document
+        juris = e["parsed"]["juris"] if name_ok else V.canon_juris_dir(doc.get("jurisdiction"))
+
+        target_name = e["name"]
+        if not juris:
             dest_dir = os.path.join(vault, V.UNSORTED_REL)
+        else:
+            dest_dir = os.path.join(vault, V.ANON_REL, juris)
+            if not name_ok:
+                built = V.conventional_name(
+                    juris,
+                    doc.get("issued_date") or (e["parsed"] or {}).get("date"),
+                    doc.get("doc_type"),
+                    doc.get("period"),
+                    ext=(e["parsed"] or {}).get("ext", "pdf"),
+                )
+                if built:
+                    target_name = built
+                    renamed.append({"sha256": e["sha256"], "from": e["name"], "to": built})
 
-        dest = os.path.join(dest_dir, e["name"])
+        dest = os.path.join(dest_dir, target_name)
         if os.path.exists(dest) and os.path.abspath(dest) != os.path.abspath(e["abs_path"]):
-            base, ext = os.path.splitext(e["name"])
-            dest = os.path.join(dest_dir, f"{base}__{e['sha256'][:8]}{ext}")
+            base, stem = os.path.splitext(target_name)
+            dest = os.path.join(dest_dir, f"{base}__{e['sha256'][:8]}{stem}")
 
         rel_dest = os.path.relpath(dest, vault)
         moves.append({"from": e["path"], "to": rel_dest, "sha256": e["sha256"],
-                      "naming_ok": e["naming_ok"]})
+                      "naming_ok": e["naming_ok"], "renamed": target_name != e["name"]})
         if not dry_run:
             os.makedirs(dest_dir, exist_ok=True)
             shutil.move(e["abs_path"], dest)
             record["file_path"] = rel_dest
+            record.setdefault("original_name", e["name"])
 
     if not dry_run and processed:
         V.save_json(processed_path, processed)
@@ -71,7 +92,8 @@ def file_documents(vault: str, manifest: dict | None = None, dry_run: bool = Fal
                     doc["file_path"] = m["to"]
             V.save_json(ledger_path, ledger)
 
-    return {"vault": vault, "dry_run": dry_run, "moved": moves, "skipped": skipped}
+    return {"vault": vault, "dry_run": dry_run, "moved": moves, "skipped": skipped,
+            "renamed": renamed}
 
 
 def main() -> int:
@@ -89,9 +111,11 @@ def main() -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False))
     else:
         prefix = "(dry-run) " if result["dry_run"] else ""
-        print(f"{prefix}moved: {len(result['moved'])} | skipped: {len(result['skipped'])}")
+        print(f"{prefix}moved: {len(result['moved'])} | renamed: {len(result['renamed'])} "
+              f"| skipped: {len(result['skipped'])}")
         for m in result["moved"]:
-            print(f"  {m['from']}  ->  {m['to']}")
+            tag = "  (renamed)" if m.get("renamed") else ""
+            print(f"  {m['from']}  ->  {m['to']}{tag}")
         for s in result["skipped"]:
             print(f"  SKIP {s['path']} ({s['reason']})")
     return 0
