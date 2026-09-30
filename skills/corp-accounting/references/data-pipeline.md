@@ -38,8 +38,11 @@ Examples: `2026-06-15_RQ_DAS_2026-05.pdf`, `2026-03-31_CRA_T2-ASSESSMENT_2025.pd
 `2026-04-30_RQ_CO17_2025.pdf`.
 
 **Why the name matters:** after anonymization the BN/NEQ/name are redacted, so jurisdiction
-and type cannot be recovered from the content. The filename is the only reliable sort key.
-When it does not conform, the document goes to `_Unsorted/` and raises a REVIEW ticket.
+and type cannot be recovered from the content. The filename is the preferred sort key. When
+it does not conform, the pipeline falls back to the extracted `jurisdiction` and **renames
+the file to the convention**; a genuinely unknown jurisdiction goes to `_Unsorted/` and
+raises a REVIEW ticket. (Anonymizer output like `<hash>_anon.pdf` is the common case and is
+handled this way.)
 
 ## Hashing and idempotency
 
@@ -55,7 +58,6 @@ Extraction (step 3) must complete and `ledger.py upsert` must run **before** `fi
 because `file_docs.py` only moves documents already present in `processed.json`. A file that
 fails extraction stays in `_Inbox` and is reported as skipped — it surfaces instead of
 silently disappearing.
-
 ## Provenance
 
 Every date, amount, and reference carries `page` + `snippet`. `file_docs.py` rewrites the
