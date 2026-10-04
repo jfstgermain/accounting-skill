@@ -72,8 +72,14 @@ stay canonical and the DB is disposable (`build --rebuild`).
 `reconcile.py` writes `40_Ledger/reconciliation.md`: (A) government payments by category and
 year, (B) matches against ledger amounts/obligations, (C) unexplained payments — usually a
 payment with no source document in the ledger, (D) obligations with no payment near the due
-date. It **cannot** see how the government *applied* a payment — only the statement of account
+date, and (E) **bank statement validation** — each statement's balance change vs the
+transactions on file, which catches a lossy export (see
+`100_Notes/Bank CSV export is incomplete - 3 missing client credits.md`).
+
+It **cannot** see how the government *applied* a payment — only the statement of account
 (relevé) shows that, so pull it whenever (A) and the ledger disagree.
+
+The **statement PDFs are authoritative**; a CSV export can silently omit rows.
 
 Classification rules are per-area: drop a `40_Ledger/payment_rules.json`
 (`{"Category": ["regex", …]}`) to tune them — the personal bank describes RQ payments as
