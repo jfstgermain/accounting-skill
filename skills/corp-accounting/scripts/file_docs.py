@@ -79,6 +79,14 @@ def file_documents(vault: str, manifest: dict | None = None, dry_run: bool = Fal
             shutil.move(e["abs_path"], dest)
             record["file_path"] = rel_dest
             record.setdefault("original_name", e["name"])
+            # keep the 20_Extracted record's path in sync so later runs don't
+            # mistake an already-filed document for a new inbox drop
+            ext = os.path.join(vault, V.EXTRACTED_REL, f"{e['sha256']}.json")
+            if os.path.exists(ext):
+                ex = V.load_json(ext) or {}
+                ex["source_file"] = rel_dest
+                ex["file_path"] = rel_dest
+                V.save_json(ext, ex)
 
     if not dry_run and processed:
         V.save_json(processed_path, processed)
