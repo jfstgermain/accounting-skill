@@ -29,6 +29,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vaultlib as V  # noqa: E402
 import bank_summary as BS  # noqa: E402
+import statement_txns as ST  # noqa: E402
 
 DB_DIR = os.path.expanduser("~/.corp-accounting")
 
@@ -58,11 +59,40 @@ def connect(vault: str, rebuild: bool = False) -> sqlite3.Connection:
             date TEXT, amount REAL, direction TEXT,
             description1 TEXT, description2 TEXT,
             category TEXT, ref TEXT,
-            source_file TEXT, imported_at TEXT)
+            source TEXT, source_file TEXT, imported_at TEXT)
     """)
+    cols = {r[1] for r in con.execute("PRAGMA table_info(payments)")}
+    if "source" not in cols:
+        con.execute("ALTER TABLE payments ADD COLUMN source TEXT")
     con.execute("CREATE INDEX IF NOT EXISTS ix_pay_date ON payments(date)")
     con.execute("CREATE INDEX IF NOT EXISTS ix_pay_cat ON payments(category)")
+    con.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)")
     return con
+
+
+def _meta_get(con, key):
+    row = con.execute("SELECT value FROM meta WHERE key=?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def _meta_set(con, key, value):
+    con.execute("INSERT OR REPLACE INTO meta VALUES (?,?)", (key, value))
+
+
+def current_source(vault):
+    if not os.path.exists(db_path(vault)):
+        return None
+    con = connect(vault)
+    src = _meta_get(con, "active_source")
+    con.close()
+    return src
+
+
+def ensure_built(vault, rules=None):
+    """Build only if the store does not exist yet; never mix sources implicitly."""
+    if not os.path.exists(db_path(vault)):
+        return build(vault, False, rules, "auto")
+    return None
 
 
 def _classify(text: str, rules: dict | None = None) -> str | None:
@@ -107,13 +137,69 @@ def parse_bank_csv(path: str, rules: dict | None = None):
     return out
 
 
-def build(vault: str, rebuild: bool = False, rules: dict | None = None) -> dict:
+def _norm(s):
+    return re.sub(r"\s+", " ", (s or "").strip()).upper()
+
+
+def _insert(con, rows, source, source_file, now, rules=None):
+    """Insert rows, deduping on (date|amount|description); repeats get a suffix."""
+    seen = {}
+    added = 0
+    for t in rows:
+        desc = _norm(t.get("description") or (t.get("description1", "") + " " + t.get("description2", "")))
+        base = hashlib.sha1(f"{t['date']}|{t['amount']:.2f}|{desc}".encode()).hexdigest()
+        seen[base] = seen.get(base, 0) + 1
+        fp = base if seen[base] == 1 else f"{base}#{seen[base]}"
+        text = f"{t.get('description') or t.get('description1','')} {t.get('description2','')}"
+        cur = con.execute(
+            "INSERT OR IGNORE INTO payments (fingerprint,date,amount,direction,description1,"
+            "description2,category,ref,source,source_file,imported_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (fp, t["date"], t["amount"], "out" if t["amount"] < 0 else "in",
+             t.get("description") or t.get("description1", ""), t.get("description2", ""),
+             t.get("category") or _classify(text, rules), t.get("ref"), source, source_file, now))
+        added += cur.rowcount
+    return added
+
+
+STATEMENT_EXT = ("BANK-STATEMENT",)
+
+
+def build(vault: str, rebuild: bool = False, rules: dict | None = None,
+          source: str = "auto") -> dict:
     V.ensure_vault(vault)
     bank = os.path.join(vault, V.ANON_REL, "Bank")
     con = connect(vault, rebuild)
     now = dt.datetime.now().astimezone().isoformat(timespec="seconds")
     files, added, seen = 0, 0, 0
-    if os.path.isdir(bank):
+
+    statements = ST.statements_in(vault) if source in ("auto", "statements") else []
+    if source == "auto":
+        source = "statements" if statements else "csv"
+
+    # a store holds ONE source: statements and CSV descriptions differ, so their
+    # fingerprints never collide — mixing them would double-count. Switching source
+    # therefore purges and rebuilds.
+    stored = _meta_get(con, "active_source")
+    switched = bool(stored) and stored != source
+    if switched:
+        con.execute("DELETE FROM payments")
+        con.execute("DELETE FROM bank_files")
+    _meta_set(con, "active_source", source)
+
+    if source == "statements":
+        for path in statements:
+            rel = os.path.relpath(path, vault)
+            digest = V.sha256_file(path)
+            if con.execute("SELECT 1 FROM bank_files WHERE sha256=?", (digest,)).fetchone():
+                seen += 1
+                continue
+            _period, txns = ST.parse_statement_transactions(path)
+            added += _insert(con, txns, "statement", rel, now, rules)
+            con.execute("INSERT OR REPLACE INTO bank_files VALUES (?,?,?,?)",
+                        (digest, rel, now, len(txns)))
+            files += 1
+
+    elif os.path.isdir(bank):
         for name in sorted(os.listdir(bank)):
             if not name.lower().endswith((".csv", ".tsv")):
                 continue
@@ -127,26 +213,21 @@ def build(vault: str, rebuild: bool = False, rules: dict | None = None) -> dict:
             except Exception as exc:  # noqa: BLE001
                 con.close()
                 raise SystemExit(f"parse failed: {exc}")
-            for t in txns:
-                cur = con.execute(
-                    "INSERT OR IGNORE INTO payments (fingerprint,date,amount,direction,description1,"
-                    "description2,category,ref,source_file,imported_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (t["fingerprint"], t["date"], t["amount"], t["direction"], t["description1"],
-                     t["description2"], t["category"], t["ref"], os.path.relpath(path, vault), now))
-                added += cur.rowcount
+            added += _insert(con, txns, "csv", os.path.relpath(path, vault), now)
             con.execute("INSERT OR REPLACE INTO bank_files VALUES (?,?,?,?)",
                         (digest, os.path.relpath(path, vault), now, len(txns)))
             files += 1
     con.commit()
     total = con.execute("SELECT count(*) FROM payments").fetchone()[0]
     con.close()
-    return {"vault": vault, "db": db_path(vault), "files_imported": files,
-            "files_skipped": seen, "rows_added": added, "rows_total": total}
+    return {"vault": vault, "db": db_path(vault), "source": source, "switched": switched,
+            "files_imported": files, "files_skipped": seen, "rows_added": added,
+            "rows_total": total}
 
 
 def query(vault: str, year: str | None = None, category: str | None = None) -> list[dict]:
     con = connect(vault)
-    sql = "SELECT date,amount,description1,description2,category,ref,source_file FROM payments WHERE 1=1"
+    sql = "SELECT date,amount,description1,description2,category,ref,source_file,source FROM payments WHERE 1=1"
     args = []
     if year:
         sql += " AND substr(date,1,4)=?"
@@ -156,7 +237,7 @@ def query(vault: str, year: str | None = None, category: str | None = None) -> l
         args.append(f"%{category}%")
     sql += " ORDER BY date"
     rows = [{"date": r[0], "amount": r[1], "description1": r[2], "description2": r[3],
-             "category": r[4], "ref": r[5], "source_file": r[6]} for r in con.execute(sql, args)]
+             "category": r[4], "ref": r[5], "source_file": r[6], "source": r[7]} for r in con.execute(sql, args)]
     con.close()
     return rows
 
@@ -178,6 +259,8 @@ def main() -> int:
     ap.add_argument("--vault", default=V.DEFAULT_VAULT)
     ap.add_argument("--rebuild", action="store_true")
     ap.add_argument("--rules", help="JSON rules file overriding the payment categories")
+    ap.add_argument("--source", choices=["auto", "csv", "statements"], default="auto",
+                    help="where transactions come from (auto: statements when available, else the CSV)")
     ap.add_argument("--year")
     ap.add_argument("--category")
     ap.add_argument("--json", action="store_true")
@@ -186,9 +269,11 @@ def main() -> int:
 
     if args.cmd == "build":
         rules = json.load(open(os.path.expanduser(args.rules), encoding="utf-8")) if args.rules else None
-        res = build(vault, args.rebuild, rules)
+        res = build(vault, args.rebuild, rules, args.source)
         print(json.dumps(res, indent=2) if args.json else
-              f"db: {res['db']}\nimported {res['files_imported']} file(s), "
+              f"db: {res['db']}\nsource: {res['source']}"
+              + ("  (source changed -> store purged)" if res.get("switched") else "")
+              + f"\nimported {res['files_imported']} file(s), "
               f"skipped {res['files_skipped']} already-imported, added {res['rows_added']} new row(s), "
               f"{res['rows_total']} total")
         return 0

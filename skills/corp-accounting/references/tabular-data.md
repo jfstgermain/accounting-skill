@@ -57,14 +57,39 @@ Bank exports are a *ledger*, not a document, so they are stored with **transacti
 identity (not by file hash) — re-exporting an overlapping range never duplicates rows.
 
 ```bash
-# 1. (re)build the derived payments store from 30_Anonymized/Bank/*.csv
+# 1. finalize the statement PDFs (summary balances), then file them
+python3 scripts/bank_statements.py --vault "$VAULT"
+python3 scripts/file_docs.py --vault "$VAULT"
+
+# 2. (re)build the derived payments store — statements first, CSV as fallback
 python3 scripts/payments.py build --vault "$VAULT"
 python3 scripts/payments.py build --vault "$VAULT" --rules "$VAULT/40_Ledger/payment_rules.json"
 python3 scripts/payments.py stats --vault "$VAULT"
 
-# 2. reconcile the ledger against the bank
+# 3. reconcile the ledger against the bank
 python3 scripts/reconcile.py --vault "$VAULT" [--from YYYY-MM-DD] [--to YYYY-MM-DD]
 ```
+
+**Statements first.** `--source auto` (the default) rebuilds the store from the statement
+PDFs whenever any are on file, because a CSV export can silently omit rows — the corporate
+export was missing three client deposits (~61 500 $) and the personal one was only a partial
+view. `statement_txns.py` parses each statement's detail using **coordinates** (amounts are
+right-aligned into debit/credit/balance columns, which is what tells a debit from a credit);
+every statement's transactions net exactly to its balance change. Use `--source csv` only
+when no statement covers the period.
+
+**Going back to CSV exports.** They still work — `payments.py build --source csv`. Three things
+to know:
+
+- A store holds **one source**. Descriptions differ between a CSV (`TAXES D'ENTREPRISE TVQPS …`)
+  and a statement (`REV QC-PROV25`), so their fingerprints never collide and mixing the two
+  would double-count. Switching source therefore **purges and rebuilds** automatically (the run
+  prints `source changed -> store purged`).
+- `reconcile.py` never rebuilds — it only builds if the store is missing — so it can't mix sources.
+- Section E keeps validating whichever source is loaded against the statements on file, so a
+  lossy CSV shows up immediately (the corporate CSV scores 30/33, the statements 33/33).
+- Re-check `payment_rules.json` when the wording changes: it is matched against *descriptions*,
+  which differ per source.
 
 The store lives **outside** iCloud at `~/.corp-accounting/<area>.sqlite`; the redacted CSVs
 stay canonical and the DB is disposable (`build --rebuild`).

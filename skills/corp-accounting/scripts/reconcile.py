@@ -69,7 +69,7 @@ def document_amounts(docs):
 
 
 def reconcile(vault, date_from, date_to, tol_days, lookback_days):
-    P.build(vault)  # idempotent
+    P.ensure_built(vault)  # only if the store does not exist; never mixes sources
     docs, obligations = load_ledger(vault)
     amounts = document_amounts(docs)
 
