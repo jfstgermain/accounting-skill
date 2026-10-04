@@ -24,6 +24,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -116,7 +117,29 @@ def reconcile(vault, date_from, date_to, tol_days, lookback_days):
     return {"vault": vault, "from": date_from, "to": date_to,
             "n_payments": len(payments), "n_obligations": len(obligations),
             "payments": payments, "matched": matched, "unexplained": unexplained,
-            "uncovered": uncovered, "totals": _totals(payments)}
+            "uncovered": uncovered, "totals": _totals(payments),
+            "statements": statement_checks(vault, docs)}
+
+
+def statement_checks(vault, docs):
+    """Validate the payments store against each bank statement's (closing - opening)."""
+    con_rows = P.query(vault)
+    out = []
+    for doc in docs.values():
+        if doc.get("doc_type") != "BANK-STATEMENT":
+            continue
+        amt = {a.get("label"): _f(a.get("value")) for a in doc.get("amounts") or []}
+        if amt.get("Solde d'ouverture") is None or amt.get("Solde de clôture") is None:
+            continue
+        m = re.search(r"p[ée]riode (\d{4}-\d{2}-\d{2}) \u2192 (\d{4}-\d{2}-\d{2})", doc.get("notes") or "")
+        if not m:
+            continue
+        start, end = m.group(1), m.group(2)
+        net = round(sum(r["amount"] for r in con_rows if start < r["date"] <= end), 2)
+        stmt = round(amt["Solde de clôture"] - amt["Solde d'ouverture"], 2)
+        out.append({"start": start, "end": end, "statement": stmt, "store": net,
+                    "diff": round(stmt - net, 2)})
+    return sorted(out, key=lambda x: x["end"])
 
 
 def _totals(payments):
@@ -180,6 +203,21 @@ def render(res):
     L.append("> The bank shows what left the account; only the government **statement of account** "
              "(relevé) shows how each payment was *applied*. Pull it for any period where (A) and "
              "the ledger disagree.")
+    L.append("")
+    L.append("## E. Bank statement validation (statement balance vs transactions on file)")
+    L.append("")
+    checks = res.get("statements") or []
+    gaps = [c for c in checks if abs(c["diff"]) >= 0.005]
+    L.append(f"{len(checks) - len(gaps)} / {len(checks)} statement period(s) reconcile exactly.")
+    L.append("")
+    if gaps:
+        L.append("| Period | Statement Δ | On file Δ | Diff |")
+        L.append("| --- | --- | --- | --- |")
+        for c in gaps:
+            L.append(f"| {c['start']} → {c['end']} | {c['statement']:,.2f} $ | {c['store']:,.2f} $ | {c['diff']:,.2f} $ |")
+        L.append("")
+        L.append("_A mismatch means a transaction is missing from the imports on file (the bank CSV "
+                 "export is lossy) — the statement PDF is the authoritative source for that period._")
     L.append("")
     return "\n".join(L)
 

@@ -47,6 +47,8 @@ def file_documents(vault: str, manifest: dict | None = None, dry_run: bool = Fal
         juris = e["parsed"]["juris"] if name_ok else V.canon_juris_dir(doc.get("jurisdiction"))
 
         topic = e.get("topic") or doc.get("topic")
+        if topic and juris and topic.lower() == juris.lower():
+            topic = None  # inbox category that already equals the jurisdiction folder
         target_name = e["name"]
         if not juris:
             dest_dir = os.path.join(vault, V.UNSORTED_REL)
