@@ -21,8 +21,7 @@ and draft reports.
    a number — flag it as REVIEW.
 5. **The accountant is the source of truth.** This skill drafts; a human reviews and sends.
 6. **Never auto-act on a REVIEW item.** The queue is OK / WARN / REVIEW + human tickets only.
-7. **Reminders are staged, then confirmed.** The script proposes; a human approves; only then
-   are they created.
+7. **Dated obligations become Apple Reminders automatically** (OK/WARN only, future dates). **Never auto-act on a REVIEW item** — those stay human tickets. See `references/reminders-contract.md`.
 
 ## Paths
 
@@ -119,21 +118,20 @@ python3 "$SKILL/scripts/ledger.py" review --vault "$VAULT"
 Writes `40_Ledger/review_queue.md` (documents, obligations, tickets). Present OK/WARN/REVIEW
 to the user as human review tickets.
 
-### 7. Stage reminders
+### 7. Push reminders to Apple Reminders
 
 ```bash
-python3 "$SKILL/scripts/reminders.py" stage --vault "$VAULT"
+python3 "$SKILL/scripts/reminders.py" push --vault "$VAULT"
 ```
 
-Prints proposals (deduplicated by document + date + kind). **Present them and ask.** On
-confirmation, create them with the `apple-reminders` skill in a list named "Corp Accounting",
-then record each:
+Creates an Apple Reminder for every **future-dated** filing / payment / instalment / response
+obligation, deduplicated by `<doc_id>:<date>:<kind>` (re-runs are safe). The list is chosen by
+area — **Corp Accounting → `Accounting - Creatix`**, **Personal Accounting → `Accounting - Personal`** —
+and the notes carry the provenance plus tags (`#accounting`, `#RevenuQuebec`/`#ARC`, `#CO17`/…, `#paiement`, `#FY2025`).
 
-```bash
-python3 "$SKILL/scripts/reminders.py" mark --vault "$VAULT" --key "<key>"
-```
-
-Only dates quoted from a document are ever proposed.
+Only **OK/WARN** obligations are pushed; **REVIEW items stay tickets** (rule 7) — use
+`--include-review` only to override deliberately. `--dry-run` previews without creating.
+Requirements: the `apple-reminders` skill and macOS Reminders permission (`reminders doctor`).
 
 ### 8. Draft reports
 
@@ -179,7 +177,7 @@ flexible name matching), then summarize/reconcile with `bank_summary.py`. Detail
 - `scripts/prefill.py` — deterministic draft extraction for RQ/CRA forms (review before use)
 - `scripts/ledger.py` — upsert extracted docs; render review_queue.md
 - `scripts/file_docs.py` — sort processed docs into jurisdiction folders
-- `scripts/reminders.py` — stage reminder proposals; mark created
+- `scripts/reminders.py` — stage + **push** dated obligations to Apple Reminders (list by area, tags, dedup)
 - `scripts/redact_table.py` — redact CSV / TSV / Apple Numbers exports (identity config + patterns)
 - `scripts/bank_summary.py` — classify / total / reconcile a (redacted) transactions export
 - `scripts/selftest.py` — end-to-end test on a throwaway vault
