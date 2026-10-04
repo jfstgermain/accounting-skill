@@ -76,6 +76,7 @@ def rebuild_obligations(documents: dict) -> list[dict]:
                 "label": d.get("label", ""),
                 "jurisdiction": doc.get("jurisdiction"),
                 "doc_type": doc.get("doc_type"),
+                "period": doc.get("period"),
                 "source_file": doc.get("source_file"),
                 "page": d.get("page"),
                 "snippet": d.get("snippet"),
