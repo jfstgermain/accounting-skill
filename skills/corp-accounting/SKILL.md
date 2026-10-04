@@ -180,5 +180,7 @@ flexible name matching), then summarize/reconcile with `bank_summary.py`. Detail
 - `scripts/reminders.py` — stage + **push** dated obligations to Apple Reminders (list by area, tags, dedup)
 - `scripts/redact_table.py` — redact CSV / TSV / Apple Numbers exports (identity config + patterns)
 - `scripts/bank_summary.py` — classify / total / reconcile a (redacted) transactions export
+- `scripts/payments.py` — derived SQLite payments store (transaction-level dedup, outside iCloud)
+- `scripts/reconcile.py` — three-way ledger ↔ bank reconciliation report
 - `scripts/selftest.py` — end-to-end test on a throwaway vault
 - `scripts/vaultlib.py` — shared helpers (paths, naming, hashing, review rules)
