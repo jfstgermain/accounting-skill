@@ -30,11 +30,26 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import vaultlib as V  # noqa: E402
 
 
+# Subfolders that are the *anonymizer's* category, not a topic to preserve.
+CATEGORY_NAMES = {
+    "tax", "taxes", "impot", "impots", "impôt", "impôts", "revenu", "revenuqc",
+    "revenu-quebec", "rq", "cra", "arc", "federal", "fédéral", "provincial", "avis",
+    "releve", "releve-de-compte", "relevé", "relevés", "releves", "bank", "banque",
+    "bancaire", "statement", "statements", "transactions", "compte", "tabular", "tableur",
+    "csv", "numbers", "table", "donnees", "données",
+}
+
+
 def _topic_for(abs_path: str, inbox: str) -> str | None:
-    """First folder under _Inbox, if any, e.g. 'Overpaid REV QC'."""
+    """First folder under _Inbox, if any, e.g. 'Overpaid REV QC'.
+
+    Category folders produced by the anonymizer (tax/, bank/, …) are not topics.
+    """
     rel = os.path.relpath(abs_path, inbox)
     parts = rel.split(os.sep)
-    return parts[0] if len(parts) > 1 else None
+    if len(parts) <= 1:
+        return None
+    return None if parts[0].strip().lower() in CATEGORY_NAMES else parts[0]
 
 
 def scan(vault: str) -> dict:

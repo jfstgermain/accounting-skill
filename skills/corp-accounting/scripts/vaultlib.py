@@ -156,7 +156,7 @@ def review_state_for(doc: dict) -> tuple[str, list[str]]:
 
     dates = doc.get("dates") or []
     actionable_types = {"RQ-COLLECTION", "RQ-NON-PRODUCTION", "RQ-REFUND-HOLD"}
-    informational_types = {"RQ-STATEMENT", "RQ-PAYMENT", "FINANCIAL-STATEMENT", "TAX-FILING", "EMAIL-THREAD", "TAX-RETURN", "BANK-STATEMENT"}
+    informational_types = {"RQ-STATEMENT", "RQ-PAYMENT", "FINANCIAL-STATEMENT", "TAX-FILING", "EMAIL-THREAD", "TAX-RETURN", "BANK-STATEMENT", "RQ-CORRESPONDENCE"}
     nonzero = any((a.get("value") not in (None, "0.00", "0", "-0.00")) for a in (doc.get("amounts") or []))
     needs_action = (doc.get("doc_type") in actionable_types
                     or (nonzero and doc.get("doc_type") not in informational_types))

@@ -44,7 +44,7 @@ LABELS = [
 
 
 def _frdate(s):
-    m = re.search(r"(\d{1,2})\s+([A-Za-zéûà]+)\s+(\d{4})", s or "", re.I)
+    m = re.search(r"(\d{1,2})(?:er|e)?\s+([A-Za-zéûà]+)\s+(\d{4})", s or "", re.I)
     if not m:
         return None
     mo = MFR.get(m.group(2).lower())
