@@ -128,10 +128,10 @@ def upsert(vault: str, extracted_path: str) -> dict:
             "obligations": [o for o in ledger["obligations"] if o["id"].startswith(doc_id + ":")]}
 
 
-def _render_review(ledger: dict) -> str:
+def _render_review(ledger: dict, area: str = "Corp Accounting") -> str:
     docs = ledger.get("documents", {})
     obligations = ledger.get("obligations", [])
-    lines = ["# Corp Accounting — Review Queue", "", f"_Generated: {_now()}_", ""]
+    lines = [f"# {area} — Review Queue", "", f"_Generated: {_now()}_", ""]
 
     counts = {"OK": 0, "WARN": 0, "REVIEW": 0}
     for d in docs.values():
@@ -171,7 +171,8 @@ def _render_review(ledger: dict) -> str:
 
 def review(vault: str, out: str | None) -> dict:
     ledger = V.load_json(os.path.join(vault, V.LEDGER_REL, V.LEDGER_FILE), None) or _empty_ledger()
-    text = _render_review(ledger)
+    area = os.path.basename(os.path.normpath(vault)) or "Corp Accounting"
+    text = _render_review(ledger, area)
     out = out or os.path.join(vault, V.LEDGER_REL, V.REVIEW_FILE)
     with open(out, "w", encoding="utf-8") as fh:
         fh.write(text)

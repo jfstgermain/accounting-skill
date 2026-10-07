@@ -14,7 +14,7 @@ and draft reports.
 1. **Never file, pay, remit, or submit anything to CRA or Revenu Québec.** Never send email.
 2. **Never state a tax rate, threshold, deadline, or balance from memory.** Use a date or
    amount only if it is quoted from the document, with page + snippet.
-3. **Only read `Corp Accounting/30_Anonymized/`.** Never read raw/source documents,
+3. **Only read `Accounting/Corp Accounting/30_Anonymized/`.** Never read raw/source documents,
    `20_Extracted` JSON through a cloud model, mappings, or secrets. (Extraction may run on a
    local model or a deterministic parser; this skill's text extraction is local.)
 4. **Every extracted fact carries provenance:** source file, page, short snippet. Never guess
@@ -25,14 +25,14 @@ and draft reports.
 
 ## Paths
 
-- Vault: `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Finance/Corp Accounting`
+- Vault: `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Finance/Accounting/Corp Accounting`
 - Drop zone: `30_Anonymized/_Inbox/` (subfolders `CRA/ RevenuQC/ Payroll/ Accountant/ _Unsorted/`)
 - Scripts: the `scripts/` folder next to this SKILL.md
 
 Set once for the session:
 
 ```bash
-VAULT="$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/Finance/Corp Accounting"
+VAULT="$HOME/Library/Mobile Documents/iCloud~md~obsidian/Documents/Finance/Accounting/Corp Accounting"
 SKILL="$HOME/dev/accounting-skill/skills/corp-accounting"
 ```
 

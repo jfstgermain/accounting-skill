@@ -28,7 +28,7 @@ spécialistes en technologies web inc., a Quebec CCPC.
 
 - Vault: Finance (Obsidian). All vault interactions go through the `obsidian` CLI
   (read/create/append/property:set) — never raw file edits on `.md` files.
-- Only read `Corp Accounting/30_Anonymized/`. Raw/source documents live outside the vault
+- Only read `Accounting/Corp Accounting/30_Anonymized/`. Raw/source documents live outside the vault
   (raw store: Proton `Accounting/1. Creatix/`, e.g. `1. Relevés/Bank/`); they never enter the
   vault except as anonymized copies.
 - The `corp-accounting` skill owns the pipeline: scan → extract → ledger → review → file →
@@ -76,7 +76,7 @@ and never let one sit in `30_Anonymized/`. Raw exports stay in the raw store
 
    ```bash
    python3 "$SKILL/scripts/redact_table.py" "<raw export>" \
-       --out "<vault>/Corp Accounting/30_Anonymized/Bank/<name>_redacted.csv"
+       --out "<vault>/Accounting/Corp Accounting/30_Anonymized/Bank/<name>_redacted.csv"
    ```
 
    It writes the value→token mapping outside the output (0600) and verifies (exit 2 on any
