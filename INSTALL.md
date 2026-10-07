@@ -36,7 +36,7 @@ documents.
 Default vault path (baked into `vaultlib.DEFAULT_VAULT`):
 
 ```
-~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Finance/Corp Accounting
+~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Finance/Accounting/Corp Accounting
 ```
 
 Override at runtime with `--vault PATH` on any script if your vault moves.

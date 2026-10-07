@@ -14,7 +14,7 @@ import os
 import re
 
 DEFAULT_VAULT = os.path.expanduser(
-    "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Finance/Corp Accounting"
+    "~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Finance/Accounting/Corp Accounting"
 )
 
 INBOX_REL = "30_Anonymized/_Inbox"
