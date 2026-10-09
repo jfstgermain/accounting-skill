@@ -4,10 +4,12 @@
 Only documents already recorded in ``40_Ledger/processed.json`` are moved, so a
 file is never filed before it has been extracted. Files whose name does not
 match the convention go to ``30_Anonymized/_Unsorted`` (and surface as REVIEW in
-the queue). The final path is written back to ``processed.json``.
+the queue). The final path is written back to ``processed.json``. After a
+successful move, income lines are auto-extracted for RQ assessments and T1
+returns (``tax_lines.py enrich``); pass ``--no-tax-lines`` to skip.
 
 Usage:
-    python3 file_docs.py [--vault PATH] [--manifest FILE] [--dry-run] [--json]
+    python3 file_docs.py [--vault PATH] [--manifest FILE] [--dry-run] [--no-tax-lines] [--json]
 """
 
 from __future__ import annotations
@@ -23,7 +25,8 @@ import vaultlib as V  # noqa: E402
 import scan_inbox  # noqa: E402
 
 
-def file_documents(vault: str, manifest: dict | None = None, dry_run: bool = False) -> dict:
+def file_documents(vault: str, manifest: dict | None = None, dry_run: bool = False,
+                   skip_tax_lines: bool = False) -> dict:
     V.ensure_vault(vault)
     if manifest is None:
         manifest = scan_inbox.scan(vault)
@@ -105,8 +108,17 @@ def file_documents(vault: str, manifest: dict | None = None, dry_run: bool = Fal
                     doc["file_path"] = m["to"]
             V.save_json(ledger_path, ledger)
 
+    tax_lines_summary = []
+    if not dry_run and moves and not skip_tax_lines:
+        try:
+            import tax_lines  # noqa: F401
+            res = tax_lines.enrich(vault)
+            tax_lines_summary = res.get("processed", [])
+        except Exception as exc:  # noqa: BLE001
+            tax_lines_summary = [{"error": f"tax_lines enrich failed: {exc}"}]
+
     return {"vault": vault, "dry_run": dry_run, "moved": moves, "skipped": skipped,
-            "renamed": renamed}
+            "renamed": renamed, "tax_lines": tax_lines_summary}
 
 
 def main() -> int:
@@ -114,11 +126,14 @@ def main() -> int:
     ap.add_argument("--vault", default=V.DEFAULT_VAULT)
     ap.add_argument("--manifest", help="scan_inbox JSON output to consume")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--no-tax-lines", action="store_true",
+                    help="skip income-line extraction after filing")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
     manifest = V.load_json(os.path.expanduser(args.manifest)) if args.manifest else None
-    result = file_documents(os.path.expanduser(args.vault), manifest, args.dry_run)
+    result = file_documents(os.path.expanduser(args.vault), manifest, args.dry_run,
+                            skip_tax_lines=args.no_tax_lines)
 
     if args.json:
         print(json.dumps(result, indent=2, ensure_ascii=False))
@@ -131,6 +146,11 @@ def main() -> int:
             print(f"  {m['from']}  ->  {m['to']}{tag}")
         for s in result["skipped"]:
             print(f"  SKIP {s['path']} ({s['reason']})")
+        for t in result.get("tax_lines") or []:
+            if t.get("error"):
+                print(f"  tax-lines ERROR: {t['error']}")
+            elif t.get("added"):
+                print(f"  tax-lines: {t.get('doc_type')} {t.get('period')} +{t.get('added')} income line(s)")
     return 0
 
 

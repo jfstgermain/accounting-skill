@@ -109,6 +109,11 @@ reported. A file whose name does not follow the convention but whose extracted
 `jurisdiction` is known is **renamed to the convention** and filed by content; the original
 name is kept in `processed.json`. Only a genuinely unknown jurisdiction goes to `_Unsorted/`.
 
+Filing also runs `tax_lines.py enrich` automatically: RQ assessments, T1 returns, corporate
+financial statements, and T2/CO-17 filings are scanned for income lines (employment,
+dividends, revenue, net income, taxable income, Part I tax, …) and the results are merged
+into the ledger with page + snippet provenance. Idempotent; pass `--no-tax-lines` to skip.
+
 ### 6. Render the review queue
 
 ```bash
@@ -142,6 +147,21 @@ Via the `obsidian` CLI, write to `50_Reports/`:
 
 See `references/report-contracts.md`. Never state a tax position as fact; route it to the
 accountant as a question.
+
+## Derived facts store (SQLite)
+
+After the ledger is updated, mirror it into a queryable SQLite index (outside iCloud):
+
+```bash
+python3 "$SKILL/scripts/facts.py" build  --vault "$VAULT"               # documents + facts
+python3 "$SKILL/scripts/facts.py" list   --vault "$VAULT" --label "emploi"
+python3 "$SKILL/scripts/facts.py" lines  --vault "$VAULT"                # income lines only
+```
+
+The DB (`~/.corp-accounting/<area>.sqlite`) is a disposable, rebuildable index of
+`ledger.json` — never a source of truth. Every fact carries `source_file`, `page`,
+`snippet`, `confidence`, and `review_state`. Personal and corporate facts stay in
+separate per-area files (never mixed).
 
 ## Idempotency
 
@@ -181,6 +201,8 @@ flexible name matching), then summarize/reconcile with `bank_summary.py`. Detail
 - `scripts/redact_table.py` — redact CSV / TSV / Apple Numbers exports (identity config + patterns)
 - `scripts/bank_summary.py` — classify / total / reconcile a (redacted) transactions export
 - `scripts/payments.py` — derived SQLite payments store (transaction-level dedup, outside iCloud)
+- `scripts/tax_lines.py` — extract income lines from RQ assessments, T1, corporate financial statements, and T2/CO-17 filings (deterministic, page + snippet)
+- `scripts/facts.py` — derived SQLite facts store (documents + facts mirrored from ledger.json)
 - `scripts/bank_statements.py` — finalize bank-statement PDFs into the ledger (summary balances)
 - `scripts/statement_txns.py` — extract the transaction detail from statement PDFs (coordinate-based)
 - `scripts/reconcile.py` — three-way ledger ↔ bank reconciliation report
