@@ -170,7 +170,8 @@ def build(vault: str, rebuild: bool = False) -> dict:
             "facts": n_facts, "documents_total": total_docs, "facts_total": total_facts}
 
 
-def _query(vault: str, doc_type=None, label=None, line=None, period=None, kind=None, year=None) -> list[dict]:
+def _query(vault: str, doc_type=None, label=None, line=None, period=None, kind=None,
+          year=None, distinct: bool = False) -> list[dict]:
     con = connect(vault)
     sql = ("SELECT f.kind, f.label, f.value, f.value_num, f.line, f.year, f.page, f.snippet, "
            "d.doc_type, d.jurisdiction, d.period, d.issued_date, d.source_file, d.review_state "
@@ -200,6 +201,15 @@ def _query(vault: str, doc_type=None, label=None, line=None, period=None, kind=N
              "period": r[10], "issued_date": r[11], "source_file": r[12], "review_state": r[13]}
             for r in con.execute(sql, args)]
     con.close()
+    if distinct:
+        seen, out = set(), []
+        for r in rows:
+            k = (r["label"], r["value_num"] if r["value_num"] is not None else r["value"],
+                 r.get("year"))
+            if k not in seen:
+                seen.add(k)
+                out.append(r)
+        rows = out
     return rows
 
 
@@ -224,6 +234,8 @@ def main() -> int:
     ap.add_argument("--year")
     ap.add_argument("--period")
     ap.add_argument("--kind")
+    ap.add_argument("--distinct", action="store_true",
+                    help="one row per (label, year, value) — collapses duplicate docs/columns")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
     vault = os.path.expanduser(args.vault)
@@ -236,7 +248,8 @@ def main() -> int:
         return 0
     if args.cmd in ("list", "lines"):
         kind = None if args.cmd == "list" else "amount"
-        rows = _query(vault, args.doc_type, args.label, args.line, args.period, kind, args.year)
+        rows = _query(vault, args.doc_type, args.label, args.line, args.period, kind, args.year,
+                      args.distinct)
         if args.json:
             print(json.dumps(rows, indent=2, ensure_ascii=False))
         else:

@@ -3,7 +3,7 @@
 
 Deterministic candidate extraction of key figures from:
   - Revenu Québec avis de cotisation (personal, 3-digit lines)
-  - CRA T1 (personal, 5-digit lines)
+  - CRA T1 (personal, 5-digit lines) + embedded TP-1000.TE Québec summary
   - corporate FINANCIAL-STATEMENT (income statement + balance sheet, 2-year columns)
   - corporate TAX-FILING (T2 instalment base: taxable income, Part I tax, SBD, …)
 
@@ -40,6 +40,16 @@ _T1_LABELS = {
 }
 _T1_MAIN_RE = re.compile(r"(\d{1,3}(?:\s\d{3})+\s\d{2})\s+(10100|12000|12010)\b")
 _T1_TOTAL_RE = re.compile(r"(\d{1,3}(?:\s\d{3})+\s\d{2})\s+Revenu total\s+15000")
+
+# --- TP-1000.TE (Québec transmission summary, embedded in the combined T1) ---
+# Lines look like: "Revenu total (ligne 199) .... 160 141 00"
+_TP1_LABELS = {
+    "199": "Revenu total (TP-1)",
+    "275": "Revenu net (TP-1)",
+    "299": "Revenu imposable (TP-1)",
+    "399": "Crédits d'impôt non remboursables (TP-1)",
+    "479": "Solde à payer (TP-1)",
+}
 
 # --- Corporate FINANCIAL-STATEMENT (BILAN + RÉSULTATS, 2 columns) -------------
 _FS_AMOUNT_RE = re.compile(r"(-?\(?\d[\d\s]*\)?)\s*\$")
@@ -122,14 +132,20 @@ def _extract_rq(rows) -> list[dict]:
         if not m:
             continue
         num, rest = m.group(1), m.group(2)
-        am = _RQ_AMOUNT_RE.search(rest)
-        if not am:
+        amounts = list(_RQ_AMOUNT_RE.finditer(rest))
+        if not amounts:
             continue
-        label = rest[:am.start()].strip().rstrip("+-= ").strip()
+        label = rest[:amounts[0].start()].strip().rstrip("+-= ").strip()
         if not label:
             continue
-        facts.append({"label": label, "value": _norm_amount(am.group(0)),
+        declared = _norm_amount(amounts[0].group(0))
+        facts.append({"label": label, "value": declared,
                       "line": num, "page": pno, "snippet": raw[:200]})
+        if len(amounts) > 1:
+            etabli = _norm_amount(amounts[1].group(0))
+            if etabli != declared:
+                facts.append({"label": label + " (établi)", "value": etabli,
+                              "line": num, "page": pno, "snippet": raw[:200]})
     return facts
 
 
@@ -156,6 +172,22 @@ def _fs_norm(token: str) -> str | None:
     except ValueError:
         return None
     return f"{-v:.2f}" if neg else f"{v:.2f}"
+
+
+def _extract_tp1(rows) -> list[dict]:
+    facts = []
+    for pno, raw in rows:
+        for m in re.finditer(r"\(ligne\s+(\d{3})\)", raw):
+            num = m.group(1)
+            canon = _TP1_LABELS.get(num)
+            if canon is None:
+                continue
+            am = re.search(r"(\d{1,3}(?:\s\d{3})+\s\d{2})\b", raw[m.end():])
+            if not am:
+                continue
+            facts.append({"label": canon, "value": _t1_value(am.group(1)),
+                          "line": num, "page": pno, "snippet": raw[:200]})
+    return facts
 
 
 def _extract_fs(rows, period: str | None) -> list[dict]:
@@ -237,8 +269,8 @@ def extract(path: str, doc_type: str | None = None, period: str | None = None) -
         facts = _extract_t2(rows, period)
     elif dt.startswith("RQ") or "ASSESSMENT" in dt:
         facts = _extract_rq(rows)
-    else:  # TAX-RETURN / T1
-        facts = _extract_t1(rows)
+    else:  # TAX-RETURN / T1 + embedded TP-1000.TE
+        facts = _extract_t1(rows) + _extract_tp1(rows)
     # dedupe on (label,value,year,line), keep first page
     seen, out = set(), []
     for f in sorted(facts, key=lambda f: (f.get("line") or "", f["page"])):

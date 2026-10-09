@@ -9,6 +9,8 @@ Turns a drop of **anonymized** corporate documents into structured, provenance-c
 records: extraction JSON, a compliance ledger, a forced review queue, staged reminders,
 and draft reports.
 
+> **Session memory:** at session start, read the vault-level `Session State.md` (vault root) for cross-area "done / next"; update it at close. This skill's durable state lives in `40_Ledger/` (ledger, review queue, reminders).
+
 ## Golden rules (inherit from the vault AGENTS.md)
 
 1. **Never file, pay, remit, or submit anything to CRA or Revenu Québec.** Never send email.
@@ -201,7 +203,7 @@ flexible name matching), then summarize/reconcile with `bank_summary.py`. Detail
 - `scripts/redact_table.py` — redact CSV / TSV / Apple Numbers exports (identity config + patterns)
 - `scripts/bank_summary.py` — classify / total / reconcile a (redacted) transactions export
 - `scripts/payments.py` — derived SQLite payments store (transaction-level dedup, outside iCloud)
-- `scripts/tax_lines.py` — extract income lines from RQ assessments, T1, corporate financial statements, and T2/CO-17 filings (deterministic, page + snippet)
+- `scripts/tax_lines.py` — extract income lines from RQ assessments (+ « établi » reassessments), T1 + TP-1000.TE, corporate financial statements, and T2/CO-17 filings (deterministic, page + snippet)
 - `scripts/facts.py` — derived SQLite facts store (documents + facts mirrored from ledger.json)
 - `scripts/bank_statements.py` — finalize bank-statement PDFs into the ledger (summary balances)
 - `scripts/statement_txns.py` — extract the transaction detail from statement PDFs (coordinate-based)
