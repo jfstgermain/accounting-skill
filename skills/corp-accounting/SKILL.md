@@ -132,9 +132,20 @@ python3 "$SKILL/scripts/reminders.py" push --vault "$VAULT"
 ```
 
 Creates an Apple Reminder for every **future-dated** filing / payment / instalment / response
-obligation, deduplicated by `<doc_id>:<date>:<kind>` (re-runs are safe). The list is chosen by
+obligation, deduplicated by `<doc_id>:<date>:<kind>:<label>` (re-runs are safe). The label is part
+of the key because one document can carry several obligations that share a date and kind
+(e.g. federal T2 and Quebec CO-17 instalments due the same day) — without it the dedup
+would silently drop a real payment obligation. The list is chosen by
 area — **Corp Accounting → `Accounting - Creatix`**, **Personal Accounting → `Accounting - Personal`** —
-and the notes carry the provenance plus tags (`#accounting`, `#RevenuQuebec`/`#ARC`, `#CO17`/…, `#paiement`, `#FY2025`).
+and the notes carry the provenance plus tags (`#accounting`, `#Federal`/`#Provincial`, `#RevenuQuebec`/`#ARC`, `#CO17`/…, `#paiement`, `#FY2025`). Every government obligation is marked federal or provincial; the payer is resolved per obligation, because the document's jurisdiction is not always the payer (a T2/CO-17 package from the accountant carries both).
+
+> **Reminders tags are text, not real tags.** EventKit exposes no tags API (verified on
+> macOS 15.7.7: `EKReminder` has no `tags`/`hashtags` selector, and no EventKit header
+> mentions tags), so Apple's native Tags field cannot be written by this script. The
+> `#Federal`/`#Provincial` hashtags land as plain text in the note — searchable, but never in
+> the Tags sidebar. The marker is therefore **also** prefixed to the reminder title
+> (`[Fédéral] …` / `[Provincial] …`), which is always visible in the list. Do not promise the
+> owner real Reminders tags: only the Reminders app itself can create them.
 
 Only **OK/WARN** obligations are pushed; **REVIEW items stay tickets** (rule 7) — use
 `--include-review` only to override deliberately. `--dry-run` previews without creating.

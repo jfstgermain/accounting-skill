@@ -128,9 +128,57 @@ TYPE_TAG = {
 KIND_TAG = {"payment": "#paiement", "filing": "#production",
             "instalment": "#acompte", "response": "#reponse"}
 
+# Which government an obligation is owed to. The document's jurisdiction is not
+# always the payer: a T2/CO-17 package filed under the accountant carries both
+# federal and Quebec instalments. So the payer is resolved per obligation —
+# doc_type first, then jurisdiction, then the label/snippet text.
+GOV_TAG = {"federal": "#Federal", "provincial": "#Provincial"}
+# Apple Reminders' native Tags field is not writable through EventKit, so the
+# federal/provincial marker is also put in the title, where it is always visible.
+GOV_LABEL = {"federal": "Fédéral", "provincial": "Provincial"}
+JURIS_GOV = {"CRA": "federal", "RevenuQC": "provincial", "RQ": "provincial"}
+TYPE_GOV = {
+    "RQ-CO17-ASSESSMENT": "provincial", "RQ-DAS-ASSESSMENT": "provincial",
+    "RQ-DAS-REMITTANCE": "provincial", "RQ-TPS-TVH-ASSESSMENT": "provincial",
+    "RQ-COLLECTION": "provincial", "RQ-NON-PRODUCTION": "provincial",
+    "RQ-REFUND-HOLD": "provincial", "RQ-STATEMENT": "provincial",
+    "RQ-PAYMENT": "provincial", "RQ-CORRESPONDENCE": "provincial",
+    "T2": "federal", "T2-ASSESSMENT": "federal",
+    "CO-17": "provincial", "CO-17-ASSESSMENT": "provincial",
+}
+_GOV_FEDERAL_RE = re.compile(
+    r"f[ée]d[ée]ral|\bARC\b|\bCRA\b|\bT2\b|T183CORP"
+    r"|receveur g[ée]n[ée]ral|\bRC0001\b",
+    re.I)
+_GOV_PROVINCIAL_RE = re.compile(
+    r"qu[ée]bec|\bRQ\b|revenu qu[ée]bec|\bCO-?17\b|\bDAS\b|\bTPS\b|\bTVQ\b"
+    r"|imp[oô]tnet",
+    re.I)
+
+
+def gov_of(p: dict) -> str | None:
+    """Return 'federal' | 'provincial' | None for one obligation."""
+    dtype = p.get("doc_type") or ""
+    if dtype in TYPE_GOV:
+        return TYPE_GOV[dtype]
+    juris = p.get("jurisdiction") or ""
+    if juris in JURIS_GOV:
+        return JURIS_GOV[juris]
+    text = " ".join(str(p.get(k) or "") for k in ("label", "snippet"))
+    fed = bool(_GOV_FEDERAL_RE.search(text))
+    prov = bool(_GOV_PROVINCIAL_RE.search(text))
+    if fed and not prov:
+        return "federal"
+    if prov and not fed:
+        return "provincial"
+    return None
+
 
 def build_tags(p: dict) -> str:
     tags = ["#accounting"]
+    gov = gov_of(p)
+    if gov:
+        tags.append(GOV_TAG[gov])
     juris = p.get("jurisdiction") or ""
     tags.append(JURIS_TAG.get(juris) or _tag(juris))
     dtype = p.get("doc_type") or ""
@@ -161,7 +209,11 @@ def build_title(p: dict) -> str:
     head = " ".join(x for x in (JURIS_LABEL.get(juris, juris), p.get("doc_type")) if x)
     label = p.get("label") or p.get("kind") or "paiement"
     per = p.get("period")
-    return f"{head} — {label}" + (f" ({per})" if per else "")
+    title = f"{head} — {label}" + (f" ({per})" if per else "")
+    gov = gov_of(p)
+    if gov:
+        title = f"[{GOV_LABEL[gov]}] {title}"
+    return title
 
 
 def push(vault: str, list_name: str | None = None, include_review: bool = False,
