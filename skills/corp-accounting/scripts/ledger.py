@@ -68,9 +68,21 @@ def validate(doc: dict) -> list[str]:
 def rebuild_obligations(documents: dict) -> list[dict]:
     obligations = []
     for doc_id, doc in documents.items():
+        seen: dict[str, int] = {}
         for d in doc.get("dates") or []:
+            # An obligation id must be unique per distinct obligation, not merely per
+            # (document, date, kind): one document can carry several obligations that
+            # share a date and kind — e.g. the federal T2 and the Quebec CO-17
+            # instalments fall on the same four due dates. Disambiguate by label,
+            # with a counter fallback so ids stay unique even when labels are empty
+            # or repeated. reminders.py dedups on this id, so a collision silently
+            # drops a real payment obligation.
+            base = (f"{doc_id}:{d.get('date')}:{d.get('kind')}:"
+                    f"{V.sanitize_token(d.get('label'), default='ITEM')[:48]}")
+            n = seen.get(base, 0)
+            seen[base] = n + 1
             obligations.append({
-                "id": f"{doc_id}:{d.get('date')}:{d.get('kind')}",
+                "id": base if n == 0 else f"{base}:{n + 1}",
                 "date": d.get("date"),
                 "kind": d.get("kind"),
                 "label": d.get("label", ""),
