@@ -151,6 +151,37 @@ Only **OK/WARN** obligations are pushed; **REVIEW items stay tickets** (rule 7) 
 `--include-review` only to override deliberately. `--dry-run` previews without creating.
 Requirements: the `apple-reminders` skill and macOS Reminders permission (`reminders doctor`).
 
+#### Alarms on payment reminders
+
+Every **payment** or **instalment** reminder gets **two** alarms: **one week before** the due
+date and **on the day itself** (`--remind-offset "-10080,0"`, minutes). Money owed should
+never arrive as a same-day surprise, and a week-ahead nudge leaves time to move funds.
+Filings, responses and other non-payment obligations get no automatic alarm. Add the alarm in
+the same create call — never as a second update, or a write race can drop fields.
+
+#### Standing recurring obligations
+
+Not every obligation comes from a document date. A monthly payroll remittance (DAS) is due on
+the 15th every month regardless of which bordereau is on file, so it cannot be represented as
+a single `dates[]` entry. Those live in `40_Ledger/recurring.json` and are staged by the same
+`push` run:
+
+```json
+{"entries": [{"key": "das-monthly-federal", "title": "[Fédéral] DAS mensuel …",
+  "first_due": "2026-11-15", "repeat": "monthly", "until": "2027-01-15",
+  "notes": "… #accounting #Federal #DAS"}]}
+```
+
+Each entry becomes **one recurring reminder** (`--repeat monthly --until …`), so a whole run
+is a single item instead of N dated ones. `first_due` in the past is skipped, and re-runs are
+safe via the same `sent` key. Amounts in these notes are **reference figures** from the last
+bordereau — they drift with salary and annual rates, so phrase them as such and never assert
+them as the amount due.
+
+> A recurring reminder's amount is an estimate. If the schedule or rate changes, edit
+> `recurring.json`; do not hand-edit the reminder in Apple Reminders, or the next `push`
+> will not reconcile it.
+
 ### 8. Draft reports
 
 Via the `obsidian` CLI, write to `50_Reports/`:
