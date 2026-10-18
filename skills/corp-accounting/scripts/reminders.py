@@ -39,12 +39,29 @@ def _now() -> str:
     return dt.datetime.now().astimezone().isoformat(timespec="seconds")
 
 
+RECURRING_FILE = "recurring.json"
+
+
 def _state_path(vault: str) -> str:
     return os.path.join(vault, V.LEDGER_REL, V.REMINDERS_FILE)
 
 
 def _load(vault: str) -> dict:
     return V.load_json(_state_path(vault), None) or {"generated_at": None, "sent": {}, "proposals": []}
+
+
+def load_recurring(vault: str) -> list[dict]:
+    """Standing recurring obligations declared in the vault.
+
+    A monthly payroll remittance is not derived from any single document date, so it
+    cannot come from an obligation. Those live in 40_Ledger/recurring.json and are
+    staged alongside the document obligations. Each entry should carry key, title,
+    first_due, repeat (and optionally until/notes).
+    """
+    data = V.load_json(os.path.join(vault, V.LEDGER_REL, RECURRING_FILE), None) or {}
+    if not isinstance(data, dict):
+        return []
+    return data.get("entries") or []
 
 
 def stage(vault: str) -> dict:
@@ -77,6 +94,34 @@ def stage(vault: str) -> dict:
             "page": o.get("page"),
             "snippet": o.get("snippet"),
             "state": o.get("state"),
+        })
+
+    # Standing recurring obligations (not document-derived): one recurring reminder
+    # covers the whole run, so the ledger keeps a single entry rather than N dates.
+    for e in load_recurring(vault):
+        key = e.get("key")
+        if not key or key in sent or key in seen:
+            continue
+        first = e.get("first_due")
+        if not first or first < dt.date.today().isoformat():
+            continue
+        seen.add(key)
+        proposals.append({
+            "key": key,
+            "title": e.get("title"),
+            "date": first,
+            "kind": e.get("kind") or "payment",
+            "jurisdiction": e.get("jurisdiction"),
+            "doc_type": e.get("doc_type") or "RECURRING",
+            "period": e.get("period"),
+            "source_file": e.get("source_file"),
+            "page": None,
+            "snippet": e.get("snippet"),
+            "state": e.get("state") or "WARN",
+            "repeat": e.get("repeat"),
+            "until": e.get("until"),
+            "title_override": e.get("title"),
+            "notes_override": e.get("notes"),
         })
 
     state["proposals"] = proposals
@@ -127,6 +172,11 @@ TYPE_TAG = {
 }
 KIND_TAG = {"payment": "#paiement", "filing": "#production",
             "instalment": "#acompte", "response": "#reponse"}
+
+# Money owed gets two nudges: a week ahead, and on the day itself. Instalments
+# (acomptes provisionnels) are payments too, so they are included.
+PAYMENT_KINDS = {"payment", "instalment"}
+PAYMENT_ALARM_OFFSETS = "-10080,0"  # minutes: 7 days before, and on the due date
 
 # Which government an obligation is owed to. The document's jurisdiction is not
 # always the payer: a T2/CO-17 package filed under the accountant carries both
@@ -229,11 +279,20 @@ def push(vault: str, list_name: str | None = None, include_review: bool = False,
         if p.get("state") == "REVIEW" and not include_review:
             skipped.append({"key": p["key"], "reason": "REVIEW — ticket, not auto-reminded"})
             continue
-        cmd = [cli, "add", "--title", build_title(p), "--list", list_name,
-               "--due", p["date"], "--notes", build_notes(p)]
+        title = p.get("title_override") or build_title(p)
+        notes = p.get("notes_override") or build_notes(p)
+        cmd = [cli, "add", "--title", title, "--list", list_name,
+               "--due", p["date"], "--notes", notes]
+        if p.get("repeat"):
+            cmd += ["--repeat", str(p["repeat"])]
+            if p.get("until"):
+                cmd += ["--until", str(p["until"])]
+        if (p.get("kind") or "") in PAYMENT_KINDS:
+            cmd += ["--remind-offset", PAYMENT_ALARM_OFFSETS]
         if dry_run:
-            pushed.append({"key": p["key"], "title": build_title(p), "date": p["date"],
-                           "list": list_name, "notes": build_notes(p)})
+            pushed.append({"key": p["key"], "title": title, "date": p["date"],
+                           "list": list_name, "notes": notes,
+                           "repeat": p.get("repeat"), "until": p.get("until")})
             continue
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -244,7 +303,7 @@ def push(vault: str, list_name: str | None = None, include_review: bool = False,
             failed.append({"key": p["key"], "error": (r.stderr or r.stdout).strip()[:200]})
             continue
         mark(vault, p["key"], note="apple-reminders")
-        pushed.append({"key": p["key"], "title": build_title(p), "date": p["date"], "list": list_name})
+        pushed.append({"key": p["key"], "title": title, "date": p["date"], "list": list_name})
     return {"vault": vault, "list": list_name, "cli": cli, "dry_run": dry_run,
             "pushed": pushed, "skipped": skipped, "failed": failed}
 
