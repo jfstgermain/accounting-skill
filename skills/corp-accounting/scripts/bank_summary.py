@@ -27,7 +27,13 @@ import sys
 
 DEFAULT_RULES = {
     "RQ-sales-tax": [r"TVQPS"],
-    "RQ-source-deductions": [r"\bRAS\b", r"EMPTX"],
+    # EMPTX is the federal (ARC) remittance line and RAS the Quebec one. They were
+    # previously lumped together as RQ, which mixed federal and provincial totals:
+    # every EMPTX row is 706,93 $ (the ARC bordereau figure) and every RAS row
+    # 1 859,81 $ (the Revenu Quebec figure). The EMPTX->federal mapping is inferred
+    # from that amount matching, not from a document spelling out the entitlement.
+    "CRA-source-deductions": [r"EMPTX"],
+    "RQ-source-deductions": [r"\bRAS\b"],
     "RQ-income-tax": [r"DECOR", r"REV\s*QC\s*CODE\s*PAI"],
     "RQ-other": [r"TXINS", r"\bRQ\b"],
     "CRA": [r"DPA\s*ADRC", r"\bADRC\b", r"\bARC\b"],
