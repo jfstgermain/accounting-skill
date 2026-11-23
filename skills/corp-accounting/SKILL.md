@@ -9,7 +9,7 @@ Turns a drop of **anonymized** corporate documents into structured, provenance-c
 records: extraction JSON, a compliance ledger, a forced review queue, staged reminders,
 and draft reports.
 
-> **Session memory:** at session start, read the vault-level `Session State.md` (vault root) for cross-area "done / next"; update it at close. This skill's durable state lives in `40_Ledger/` (ledger, review queue, reminders).
+> **Session memory:** at session start, read the vault-level `Session State.md` (vault root) for cross-area "done / next"; at close, append a dated entry to `Sessions/YYYY-MM-DD.md` (vault root) and refresh the dashboard's `Current` block. This skill's durable state lives in `40_Ledger/` (ledger, review queue, reminders).
 
 ## Golden rules (inherit from the vault AGENTS.md)
 

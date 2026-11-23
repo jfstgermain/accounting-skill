@@ -96,12 +96,18 @@ def parse_statement_transactions(path, period=None):
         for y in sorted(rows):
             row = sorted(rows[y], key=lambda w: w[0])
             m = re.match(r"^(\d{1,2})$", row[0][4]) if row else None
-            if m and len(row) > 1 and row[1][4].lower().rstrip(".") in MONTHS:
-                day = int(m.group(1))
-                mon = MONTHS[row[1][4].lower().rstrip(".")]
-                dd = _infer_year(day, mon, start, end)
-                if dd:
-                    current = dd
+            if m and len(row) > 1:
+                # The month cell is usually "oct" but the anonymizer can merge the
+                # day into it ("oct19") when a redaction token overlaps the date
+                # column. Take the alphabetic prefix so the row keeps its own date
+                # instead of silently inheriting the previous row's date.
+                mon_txt = re.match(r"^([a-zéèêàûôç]+)", row[1][4].lower().rstrip("."))
+                mon = MONTHS.get(mon_txt.group(1)) if mon_txt else None
+                if mon:
+                    day = int(m.group(1))
+                    dd = _infer_year(day, mon, start, end)
+                    if dd:
+                        current = dd
             desc = " ".join(w[4] for w in row if 60 < w[0] < 300 and not TOKEN.match(w[4])).strip()
             bucket = {}
             for w in row:

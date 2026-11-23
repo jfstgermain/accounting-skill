@@ -35,7 +35,14 @@ DEFAULT_RULES = {
     "CRA-source-deductions": [r"EMPTX"],
     "RQ-source-deductions": [r"\bRAS\b"],
     "RQ-income-tax": [r"DECOR", r"REV\s*QC\s*CODE\s*PAI"],
-    "RQ-other": [r"TXINS", r"\bRQ\b"],
+    # TXINS is the federal corporation-tax instalment bill ("Federal - Corporation Tax
+    # Payments - TXINS"), DECOR the Quebec one ("…- DECOR", the COZ-1027.R voucher).
+    # Evidence: the four DECOR rows (4 506 $ each) total 18 024 $, exactly the
+    # "Versements" RQ credited in the FY2026 CO-17 assessment, while the TXINS rows
+    # (3 724 $) reconcile with CRA's payment total (14 898,71 $). Filing TXINS under
+    # RQ mixed federal instalments into the provincial bucket.
+    "CRA-income-tax": [r"TXINS"],
+    "RQ-other": [r"\bRQ\b"],
     "CRA": [r"DPA\s*ADRC", r"\bADRC\b", r"\bARC\b"],
     "RQ-refund": [r"GOUV\.?\s*QUEBEC"],
 }
