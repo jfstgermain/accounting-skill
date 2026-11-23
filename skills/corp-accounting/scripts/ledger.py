@@ -88,7 +88,12 @@ def rebuild_obligations(documents: dict) -> list[dict]:
                 "label": d.get("label", ""),
                 "jurisdiction": doc.get("jurisdiction"),
                 "doc_type": doc.get("doc_type"),
-                "period": doc.get("period"),
+                # A date may belong to a different period than the document that
+                # states it: the FY2026 filing package carries the *FY2027*
+                # instalment schedule (due 2026-07-31 → 2027-04-30). Prefer the
+                # per-date period so reminders are titled with the year the
+                # payment funds, not the year of the document.
+                "period": d.get("period") or doc.get("period"),
                 "source_file": doc.get("source_file"),
                 "page": d.get("page"),
                 "snippet": d.get("snippet"),

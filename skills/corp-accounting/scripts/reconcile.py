@@ -45,6 +45,31 @@ def _is_gov(cat):
     return bool(cat) and any(cat.startswith(p) for p in GOV_PREFIXES)
 
 
+MONEY = re.compile(r"(\d[\d ,]*\d|\d)\s*\$")
+
+
+def _expected_amount(o):
+    """The money figure quoted in an obligation's snippet, if there is one.
+
+    Instalments carry their amount only in the snippet ("2026-10-31 / 4,399 $"), not in
+    the document's ``amounts[]``. Without it, an unrelated refund landing one day before
+    the due date would count as proof that the instalment had been paid.
+    """
+    snippet = (o.get("snippet") or "").replace("\u00a0", " ")
+    hits = MONEY.findall(snippet)
+    if not hits:
+        return None
+    raw = hits[-1].replace(" ", "")
+    try:
+        if re.fullmatch(r"\d{1,3}(?:,\d{3})+", raw):      # 15,446 — thousands separator
+            return float(raw.replace(",", ""))
+        if re.fullmatch(r"\d+,\d{2}", raw):               # 4.399,50 — decimal comma
+            return float(raw.replace(",", "."))
+        return float(raw.replace(",", ""))
+    except ValueError:
+        return None
+
+
 def _d(s):
     try:
         return dt.date.fromisoformat(s)
@@ -84,6 +109,7 @@ def reconcile(vault, date_from, date_to, tol_days, lookback_days):
     by_amount = {}
     for a in amounts:
         by_amount.setdefault(round(a["value"], 2), []).append(a)
+    known_amounts = set(by_amount)
 
     matched, unexplained = [], []
     for p in payments:
@@ -101,8 +127,12 @@ def reconcile(vault, date_from, date_to, tol_days, lookback_days):
             unexplained.append(p)
 
     # heuristic: an obligation is "covered" if some government payment lands within
-    # [due - lookback, due + tol]
-    uncovered = []
+    # [due - lookback, due + tol] — but a payment that merely lands near the date
+    # proves nothing about the amount. A 321,79 $ refund credit one day before a
+    # 4 399 $ instalment used to mark that instalment as covered, so a genuinely
+    # unpaid instalment vanished from this list. Date proximity with no amount
+    # agreement is now reported separately instead of being treated as coverage.
+    uncovered, unverified = [], []
     for o in obligations:
         if o.get("kind") not in ("payment", "instalment", "filing"):
             continue
@@ -113,11 +143,21 @@ def reconcile(vault, date_from, date_to, tol_days, lookback_days):
                 if -lookback_days <= (_d(p["date"]) - due).days <= tol_days]
         if not near:
             uncovered.append(o)
+            continue
+        expected = _expected_amount(o)
+        if expected is not None:
+            ok = any(abs(abs(p["amount"]) - expected) <= max(1.0, expected * 0.01) for p in near)
+        else:
+            doc_amounts = {round(a["value"], 2) for a in amounts
+                           if a.get("doc_id") == o.get("doc_id")} or known_amounts
+            ok = any(round(abs(p["amount"]), 2) in doc_amounts for p in near)
+        if not ok:
+            unverified.append(o)
 
     return {"vault": vault, "from": date_from, "to": date_to,
             "n_payments": len(payments), "n_obligations": len(obligations),
             "payments": payments, "matched": matched, "unexplained": unexplained,
-            "uncovered": uncovered, "totals": _totals(payments),
+            "uncovered": uncovered, "unverified": unverified, "totals": _totals(payments),
             "statements": statement_checks(vault, docs)}
 
 
@@ -196,6 +236,17 @@ def render(res):
     L.append("")
     if res["uncovered"]:
         for o in res["uncovered"]:
+            L.append(f"- **{o.get('date')}** {o.get('jurisdiction')} {o.get('doc_type')} — {o.get('label')}")
+    else:
+        L.append("_None._")
+    L.append("")
+    L.append("### D2. Payment lands near the due date, but no amount agrees")
+    L.append("")
+    L.append("_A payment close to the date does **not** prove the obligation was paid — an unrelated "
+             "refund or remittance can land in the same window. Check these against the statement of account._")
+    L.append("")
+    if res.get("unverified"):
+        for o in res["unverified"]:
             L.append(f"- **{o.get('date')}** {o.get('jurisdiction')} {o.get('doc_type')} — {o.get('label')}")
     else:
         L.append("_None._")
